@@ -19,6 +19,10 @@ window.addEventListener("DOMContentLoaded", () => {
     if (input && msg) msg.textContent = await backend.greet(input.value);
   });
 
+  document.querySelector("#clear-btn")?.addEventListener("click", () => {
+    if (msg) msg.textContent = "";
+  });
+
   backend.platformInfo().then((info) => {
     const el = document.querySelector<HTMLElement>("#platform");
     if (el) el.textContent = `${info.os} / ${info.arch}`;
