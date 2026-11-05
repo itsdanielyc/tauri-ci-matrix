@@ -53,20 +53,22 @@ jobs:
         run: |
           for d in incoming/snapshots-*; do cp -R "$d"/. tests/ui/__snapshots__/; done
           git status --short tests/ui/__snapshots__
-      - name: Commit and open a pull request
+      - name: Commit the baselines
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if git diff --quiet && [ -z "$(git ls-files --others --exclude-standard tests/ui/__snapshots__)" ]; then
-            echo "No snapshot changes."; exit 0
-          fi
-          branch="snapshots/update-${{ github.run_id }}"
+          git add tests/ui/__snapshots__
+          if git diff --cached --quiet; then echo "No snapshot changes."; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$branch"
-          git add tests/ui/__snapshots__
           git commit -m "Update visual snapshots from run ${{ github.run_id }}"
-          git push origin "$branch"
-          gh pr create --base main --head "$branch" \
-            --title "Update visual snapshots (run ${{ github.run_id }})" \
-            --body "Baselines captured on ubuntu-latest, windows-latest and macos-latest by the snapshots workflow. Review the images before merging."
+          if [ "${{ github.ref_name }}" != "main" ]; then
+            # Dispatched on a working branch: land the baselines on that branch,
+            # so the pull request that is already open picks them up.
+            git push origin "HEAD:${{ github.ref_name }}"
+          else
+            branch="snapshots/update-${{ github.run_id }}"
+            git checkout -b "$branch"
+            git push origin "$branch"
+            gh pr create --base main --head "$branch"               --title "Update visual snapshots (run ${{ github.run_id }})"               --body "Baselines captured on ubuntu-latest, windows-latest and macos-latest by the snapshots workflow. Review the images before merging."
+          fi
