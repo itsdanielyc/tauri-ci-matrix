@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window, including the WebdriverIO plugin permissions used by the E2E suite",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "opener:default",
+    "wdio:default",
+    "wdio-webdriver:default"
+  ]
+}
