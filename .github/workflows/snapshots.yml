@@ -27,7 +27,20 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium webkit
+      - name: Playwright browsers
+        # Ubuntu's apt can stall on a service-restart prompt during
+        # --with-deps; keep it non-interactive and bound each attempt.
+        timeout-minutes: 12
+        shell: bash
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
+        run: |
+          for attempt in 1 2; do
+            timeout 420 npx playwright install --with-deps chromium webkit && exit 0
+            echo "attempt $attempt failed or stalled; retrying"
+          done
+          exit 1
       - name: Capture baselines
         env:
           CI: "1"
