@@ -114,3 +114,16 @@ button {
     background-color: #0f0f0f69;
   }
 }
+
+.meta {
+  margin-top: 2rem;
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+#backend-badge[data-kind="mock"] {
+  color: #b45309;
+}
