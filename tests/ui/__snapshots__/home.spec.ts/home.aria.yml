@@ -1,0 +1,20 @@
+- main:
+  - heading "Welcome to Tauri" [level=1]
+  - link "Vite logo":
+    - /url: https://vite.dev
+    - img "Vite logo"
+  - link "Tauri logo":
+    - /url: https://tauri.app
+    - img "Tauri logo"
+  - link "typescript logo":
+    - /url: https://www.typescriptlang.org/docs
+    - img "typescript logo"
+  - paragraph: Click on the Tauri logo to learn more about the framework
+  - form "Greet":
+    - textbox "Name":
+      - /placeholder: Enter a name...
+    - button "Greet"
+  - paragraph
+  - text: "backend:"
+  - strong: mock
+  - text: "platform: mock / mock"

@@ -2,24 +2,25 @@
 // WebdriverIO suite can execute code and mock commands inside the real shell.
 // It is a no-op outside Tauri (plain browser), so the web build is unaffected.
 import "@wdio/tauri-plugin";
-import { invoke } from "@tauri-apps/api/core";
-
-let greetInputEl: HTMLInputElement | null;
-let greetMsgEl: HTMLElement | null;
-
-async function greet() {
-  if (greetMsgEl && greetInputEl) {
-    greetMsgEl.textContent = await invoke("greet", {
-      name: greetInputEl.value,
-    });
-  }
-}
+import { backend } from "./api";
 
 window.addEventListener("DOMContentLoaded", () => {
-  greetInputEl = document.querySelector("#greet-input");
-  greetMsgEl = document.querySelector("#greet-msg");
-  document.querySelector("#greet-form")?.addEventListener("submit", (e) => {
+  const input = document.querySelector<HTMLInputElement>("#greet-input");
+  const msg = document.querySelector<HTMLElement>("#greet-msg");
+  const badge = document.querySelector<HTMLElement>("#backend-badge");
+
+  if (badge) {
+    badge.textContent = backend.kind === "native" ? "native" : "mock";
+    badge.dataset.kind = backend.kind;
+  }
+
+  document.querySelector("#greet-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    greet();
+    if (input && msg) msg.textContent = await backend.greet(input.value);
+  });
+
+  backend.platformInfo().then((info) => {
+    const el = document.querySelector<HTMLElement>("#platform");
+    if (el) el.textContent = `${info.os} / ${info.arch}`;
   });
 });

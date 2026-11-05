@@ -1,7 +1,13 @@
-# Layer 1 of the spike: build the debug binary and run the real-shell (L6)
-# WebdriverIO suite on all six free GitHub-hosted runners, including macOS
-# through the embedded WebDriver provider. Each job uploads the screenshot the
-# suite takes, named after the OS and CPU architecture the app reported.
+# The spike's main workflow, in tiers of cost:
+#   unit  (1 Linux job)       L1/L2: Vitest, mock-vs-contract conformance.
+#   ui    (3 OS runners)      L4/L5: Playwright on chromium + webkit against the
+#                             Vite dev server and the labelled mock; ARIA, layout
+#                             geometry and per-OS pixel snapshots.
+#   e2e   (6 OS runners)      L6: debug binary driven through the embedded
+#                             WebDriver provider, including macOS; a screenshot
+#                             named after the OS and CPU the app reported.
+#   sheet (1 Linux job)       Collects every screenshot into one HTML contact
+#                             sheet so a developer on one OS can see all of them.
 name: ci
 
 on:
@@ -18,6 +24,53 @@ permissions:
   contents: read
 
 jobs:
+  unit:
+    name: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run test:unit
+      - name: Type-check the suites
+        run: npx tsc -p tests/e2e/tsconfig.json --noEmit
+
+  ui:
+    name: ui (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Playwright browsers
+        run: npx playwright install --with-deps chromium webkit
+      - name: Playwright (chromium + webkit, against the mock)
+        env:
+          CI: "1"
+        run: npm run test:ui
+      - name: Upload report and diffs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-${{ matrix.os }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
   e2e:
     name: e2e (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -87,3 +140,25 @@ jobs:
           path: artifacts/e2e
           if-no-files-found: warn
           retention-days: 7
+
+  sheet:
+    name: contact sheet
+    needs: [e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: e2e-*
+          path: shots
+      - run: node scripts/contact-sheet.mjs shots contact-sheet.html
+      - uses: actions/upload-artifact@v7
+        with:
+          name: contact-sheet
+          path: contact-sheet.html
+          retention-days: 14
