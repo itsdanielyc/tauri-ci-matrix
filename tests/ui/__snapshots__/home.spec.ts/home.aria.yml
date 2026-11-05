@@ -14,6 +14,7 @@
     - textbox "Name":
       - /placeholder: Enter a name...
     - button "Greet"
+    - button "Clear"
   - paragraph
   - text: "backend:"
   - strong: mock

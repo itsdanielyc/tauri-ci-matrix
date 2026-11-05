@@ -95,6 +95,10 @@ button {
   margin-right: 5px;
 }
 
+#clear-btn {
+  margin-left: 5px;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     color: #f6f6f6;

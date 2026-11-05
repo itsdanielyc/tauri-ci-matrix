@@ -1,0 +1,26 @@
+{
+  "keel": 1,
+  "name": "spike",
+  "profile": "tauri-web",
+  "platforms": {
+    "tier1": ["windows-x64", "macos-arm64", "linux-x64"],
+    "tier2": ["windows-arm64", "macos-x64", "linux-arm64"],
+    "tier3": []
+  },
+  "commands": {
+    "lint": null,
+    "unit": "npm run test:unit",
+    "contracts": "npm run test:unit",
+    "ui": "npm run test:ui",
+    "e2e": "npm run test:e2e",
+    "build": "npm run build:debug",
+    "package": "npm run tauri build",
+    "installers": null
+  },
+  "paths": {
+    "ui": "src/",
+    "native": "src-tauri/",
+    "contracts": "contracts/",
+    "e2e": "tests/e2e/"
+  }
+}

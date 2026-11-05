@@ -19,6 +19,15 @@ test("greets through the mock backend using the shared contract", async ({ page 
   await expect(page.locator("#greet-msg")).toHaveText(greeting("Keel"));
 });
 
+test("clear empties the greeting message and keeps the name", async ({ page }) => {
+  await page.getByLabel("Name").fill("Keel");
+  await page.getByRole("button", { name: "Greet" }).click();
+  await expect(page.locator("#greet-msg")).toHaveText(greeting("Keel"));
+  await page.getByRole("button", { name: "Clear" }).click();
+  await expect(page.locator("#greet-msg")).toBeEmpty();
+  await expect(page.getByLabel("Name")).toHaveValue("Keel");
+});
+
 test("tier 1: accessibility structure is identical everywhere", async ({ page }) => {
   // One YAML baseline for every engine and OS: the semantic tree must not
   // depend on the platform.
