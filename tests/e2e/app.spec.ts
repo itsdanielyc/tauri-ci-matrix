@@ -3,7 +3,7 @@
 // IPC boundary to Rust, which no browser-mode test can do.
 import { browser, $, expect } from "@wdio/globals";
 import "@wdio/native-types";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { greeting } from "../../contracts/greet.js";
 
@@ -16,6 +16,10 @@ type PlatformInfo = {
 
 describe("spike in the real shell", () => {
   it("renders the main window with the native backend", async () => {
+    // The window title comes from tauri.conf.json, so a renamed app is checked
+    // against its own configuration, never a hard-coded string.
+    const conf = JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8"));
+    expect(await browser.getTitle()).toBe(conf.app.windows[0].title);
     await expect($("h1")).toHaveText("Welcome to Tauri");
     await expect($("#greet-input")).toBeDisplayed();
     // The badge proves the UI is talking to Rust, not to the labelled mock.

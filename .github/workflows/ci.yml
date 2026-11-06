@@ -1,4 +1,4 @@
-# The spike's main workflow, in tiers of cost:
+# Main workflow, in tiers of cost:
 #   unit  (1 Linux job)       L1/L2: Vitest, mock-vs-contract conformance.
 #   ui    (3 OS runners)      L4/L5: Playwright on chromium + webkit against the
 #                             Vite dev server and the labelled mock; ARIA, layout

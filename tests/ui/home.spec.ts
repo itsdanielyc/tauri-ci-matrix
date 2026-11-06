@@ -1,6 +1,7 @@
 // L4 (behaviour against the mock) and L5 (the three visual tiers) for the
 // home screen. Runs on chromium and webkit; in CI, on all three OS runners.
 import { test, expect } from "@playwright/test";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { greeting } from "../../contracts/greet";
 import { assertGeometry, captureGeometry } from "./geometry";
@@ -42,5 +43,9 @@ test("tier 2: layout geometry stays within tolerance everywhere", async ({ page 
 
 test("tier 3: pixels match the per-engine, per-OS baseline", async ({ page }, testInfo) => {
   // Baselines are captured in CI by the snapshots workflow, never on a laptop.
-  await expect(page).toHaveScreenshot(`home-${testInfo.project.name}-${platform}.png`, { fullPage: true });
+  // Locally, a missing baseline means "not captured yet", not a failure.
+  const name = `home-${testInfo.project.name}-${platform}.png`;
+  const baseline = join(testInfo.project.testDir, "__snapshots__", "home.spec.ts", name);
+  test.skip(!process.env.CI && !existsSync(baseline), "no local pixel baseline; the snapshots workflow captures them on the runners");
+  await expect(page).toHaveScreenshot(name, { fullPage: true });
 });
