@@ -1,0 +1,160 @@
+# Tag-driven release for this tauri-web project (from keel-release/references/release-workflow.yml).
+# On a v* tag: refuse unless the installers workflow passed on the tagged
+# commit (the gate job), then build bundles on every Tier 1 runner (plus Tier 2 build
+# runners), run the installer round trips, upload bundles and checksums, and
+# create the release only when every build job passed. Signing
+# runs when the secrets exist and is skipped otherwise, with the release
+# notes saying which.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  gate:
+    name: installers green on the tagged commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Find a successful installers run for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow installers --commit "$GITHUB_SHA" --status success --json databaseId --jq 'length')
+          if [ "${n:-0}" -eq 0 ]; then
+            echo "No green installers run exists for $GITHUB_SHA. Run it on main and tag that commit." >&2
+            exit 1
+          fi
+  build:
+    name: build (${{ matrix.os }})
+    needs: [gate]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Rust toolchain
+        shell: bash
+        run: rustup update stable && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-bin: false
+          key: release
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl wget file pkg-config patchelf \
+            libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libssl-dev libxdo-dev xvfb libfuse2t64
+      - run: npm ci
+      - name: Version check
+        shell: bash
+        run: |
+          v=$(node -p "require('./package.json').version")
+          grep -q "\"version\": \"$v\"" src-tauri/tauri.conf.json || { echo "tauri.conf.json version != $v"; exit 1; }
+          grep -q "^version = \"$v\"" src-tauri/Cargo.toml || { echo "Cargo.toml version != $v"; exit 1; }
+          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != v$v"; exit 1; }
+      # A step's `if` cannot read that step's own `env`, so the secret is
+      # tested through a job-level variable set from the secret below.
+      - name: Import Apple certificate
+        if: runner.os == 'macOS' && env.HAS_APPLE_CERT == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$APPLE_CERTIFICATE" | base64 --decode > cert.p12
+          security create-keychain -p actions build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p actions build.keychain
+          security import cert.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k actions build.keychain
+      - name: Notarization key file
+        if: runner.os == 'macOS' && env.HAS_APPLE_CERT == 'true'
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          echo "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+          echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+      - name: Build bundles
+        shell: bash
+        env:
+          # Tauri 2 reads APPLE_API_KEY (the key id), APPLE_API_ISSUER and
+          # APPLE_API_KEY_PATH (the .p8 file) for notarization.
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          # A missing secret arrives as an empty string; unset those so Tauri
+          # does not try to sign or notarize with an empty identity.
+          for v in APPLE_SIGNING_IDENTITY APPLE_API_KEY APPLE_API_ISSUER APPLE_API_KEY_PATH TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD; do
+            [ -z "${!v:-}" ] && unset "$v"
+          done
+          npm run tauri build
+      - name: Start Xvfb
+        if: runner.os == 'Linux'
+        run: |
+          nohup Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp > "$RUNNER_TEMP/xvfb.log" 2>&1 &
+          for _ in $(seq 1 50); do [ -S /tmp/.X11-unix/X99 ] && break; sleep 0.2; done
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+      - name: Installer round trips (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/installer-test.ps1
+      - name: Installer round trips (macOS, Linux)
+        if: runner.os != 'Windows'
+        run: bash scripts/installer-test.sh
+      - name: Checksums
+        shell: bash
+        run: |
+          mkdir -p out
+          find src-tauri/target/release/bundle -type f \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o -name '*.sig' -o -name 'latest.json' \) -exec cp {} out/ \;
+          (cd out && sha256sum * > "../SHA256SUMS-${{ matrix.os }}.txt" && mv "../SHA256SUMS-${{ matrix.os }}.txt" .)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bundles-${{ matrix.os }}
+          path: out
+          retention-days: 7
+
+  publish:
+    name: publish draft
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: bundles-*
+          path: assets
+          merge-multiple: true
+      - name: Changelog section
+        shell: bash
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          awk -v v="$v" '/^## /{p=index($0,v)>0} p' CHANGELOG.md > notes.md || true
+          [ -s notes.md ] || echo "Release ${GITHUB_REF_NAME}. Signing: see release notes policy." > notes.md
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          pre=""; case "${GITHUB_REF_NAME}" in v0.*) pre="--prerelease";; esac
+          gh release create "${GITHUB_REF_NAME}" assets/* --title "${GITHUB_REF_NAME}" --notes-file notes.md $pre
