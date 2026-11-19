@@ -32,6 +32,25 @@ describe("spike in the real shell", () => {
     await expect($("#greet-msg")).toHaveText(greeting("Keel"));
   });
 
+  it("enforces a content security policy with no dev-server allowance", async () => {
+    // The running app: a policy is in force, so an injected inline script
+    // does not run. With "csp": null it does.
+    const inlineRan = await browser.execute(() => {
+      const script = document.createElement("script");
+      script.textContent = "window.__inlineRan = true";
+      document.head.appendChild(script);
+      return (window as unknown as { __inlineRan?: boolean }).__inlineRan === true;
+    });
+    expect(inlineRan).toBe(false);
+    // The configured policy has nothing that only a dev server needs.
+    // ipc.localhost is Tauri's own IPC endpoint, not a server; the dev
+    // server's WebSocket belongs in devCsp.
+    const conf = JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8"));
+    const csp: unknown = conf.app.security.csp;
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).not.toMatch(/ws:|wss:|localhost:[0-9]|127[.]0[.]0[.]1|unsafe-eval|[*]/);
+  });
+
   it("reports the platform and saves a screenshot named after it", async () => {
     const info = (await browser.tauri.execute(({ core }) =>
       core.invoke("platform_info"),

@@ -1,8 +1,11 @@
 // The seam between the UI and the backend. Inside the Tauri shell the calls go
-// over IPC to Rust; in a plain browser (Vite dev server, Playwright, the web
-// build) a labelled mock answers instead. The mock is held to the same
-// contract as Rust by tests/unit/contract.test.ts and by the real-shell suite,
-// so a UI test that passes against the mock means something.
+// over IPC to Rust. Under the Vite dev server in a plain browser (`npm run
+// dev`, the Playwright UI suite) a labelled mock answers instead. A built app
+// that is not inside the shell is broken and says so: it never runs on the
+// mock, where everything a person entered would be gone when the window
+// closed. The mock is held to the same contract as Rust by
+// tests/unit/contract.test.ts and by the real-shell suite, so a UI test that
+// passes against the mock means something.
 import { invoke } from "@tauri-apps/api/core";
 import { greeting } from "../contracts/greet";
 
@@ -39,4 +42,15 @@ export const mock: Backend = {
   }),
 };
 
-export const backend: Backend = isNative ? native : mock;
+/**
+ * Picks the backend. `dev` is Vite's `import.meta.env.DEV`: true under the
+ * dev server, false in every build. Only the dev server may fall back to the
+ * mock; a build outside the shell throws, and src/main.ts shows the message.
+ */
+export function selectBackend(inShell: boolean, dev: boolean): Backend {
+  if (inShell) return native;
+  if (!dev) {
+    throw new Error("The app could not reach its backend, so it cannot open or save anything. Reinstall it, or report this.");
+  }
+  return mock;
+}
