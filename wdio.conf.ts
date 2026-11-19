@@ -7,7 +7,12 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const productName = "spike";
-const targetDir = join(__dirname, "src-tauri", "target", "debug");
+// CARGO_TARGET_DIR is honoured so a short target path (needed on Windows when
+// the project path is long: LNK1104) still lets the suite find the binary.
+const targetRoot = process.env.CARGO_TARGET_DIR
+  ? path.resolve(process.env.CARGO_TARGET_DIR)
+  : join(__dirname, "src-tauri", "target");
+const targetDir = join(targetRoot, "debug");
 const appBinaryPath =
   process.platform === "win32"
     ? join(targetDir, `${productName}.exe`)
@@ -15,7 +20,7 @@ const appBinaryPath =
 
 if (!existsSync(appBinaryPath)) {
   throw new Error(
-    `Tauri debug binary not found at ${appBinaryPath}. Run: npm run build:debug`,
+    `Tauri debug binary not found at ${appBinaryPath}. Run: npm run build:debug (with the same CARGO_TARGET_DIR, if you set one)`,
   );
 }
 
