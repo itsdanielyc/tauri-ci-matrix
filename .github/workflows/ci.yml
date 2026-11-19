@@ -69,6 +69,7 @@ jobs:
           for attempt in 1 2; do
             $bound npx playwright install --with-deps chromium webkit && exit 0
             echo "attempt $attempt failed or stalled"
+            [ "$attempt" = 2 ] && break
             # A timed-out attempt leaves its apt-get running with the dpkg lock
             # held, so a retry would fail at once. A slow package mirror is the
             # usual cause: let that apt-get finish, then the retry finds the
